@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,7 +58,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Green = Color(0xFF2E7D32)
 
@@ -75,6 +78,7 @@ fun NavScreen(store: Store) {
             ) {
                 Text("Barkan Nav", fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Green)
                 Text("נוסעים ברכב לחניון חנה וסע, וממשיכים בתחבורה ציבורית.", color = Color.DarkGray)
+                UpdateBanner()
                 DestinationCard(store)
                 LotCard(store)
                 GoCard(store)
@@ -282,5 +286,45 @@ private fun GoSteps(store: Store, lot: Lot, dest: String) {
             "אפשר לפתוח את שלב ב כבר עכשיו כדי לבדוק זמנים, או כשמגיעים לחניון.",
             fontSize = 13.sp, color = Color.Gray,
         )
+    }
+}
+
+/** Shown only when GitHub has a newer, properly signed version. */
+@Composable
+private fun UpdateBanner() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var info by remember { mutableStateOf<Updater.Info?>(null) }
+    var busy by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        info = withContext(Dispatchers.IO) { runCatching { Updater.check() }.getOrNull() }
+    }
+
+    val u = info ?: return
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3C4)),
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("יש גרסה חדשה: ${u.versionName}", Modifier.weight(1f), fontWeight = FontWeight.Medium)
+            Button(
+                enabled = !busy,
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        val apk = withContext(Dispatchers.IO) {
+                            runCatching { Updater.download(ctx, u) }.getOrNull()
+                                ?.takeIf { Updater.verify(ctx, it) }
+                        }
+                        busy = false
+                        when {
+                            apk == null -> Toast.makeText(ctx, "ההורדה נכשלה, נסה שוב", Toast.LENGTH_LONG).show()
+                            !Updater.install(ctx, apk) -> Toast.makeText(ctx, "אשר התקנה מהאפליקציה הזאת, חזור ולחץ שוב \"עדכן\"", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                },
+            ) { Text(if (busy) "מוריד..." else "עדכן") }
+        }
     }
 }
