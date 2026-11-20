@@ -42,7 +42,6 @@ jobs:
       # Without the password: a test build only, to check that the code compiles.
       - name: Build test APK
         if: ${{ env.HAS_KEY != 'true' }}
-        env:
         run: |
           set -o pipefail
           gradle :app:assembleDebug --no-daemon 2>&1 | tee "$RUNNER_TEMP/gradle.log"
