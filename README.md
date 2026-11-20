@@ -23,7 +23,7 @@
 
 GitHub Actions בונה APK בכל דחיפה ל-`main` ומפרסם אותו ב-Releases.
 
-לבנייה חתומה צריך במאגר את הסוד `KEYSTORE_PASSWORD`. מפתח החתימה המוצפן נמצא ב-`signing/release.p12`.
+לבנייה חתומה צריך במאגר את הסוד `KEYSTORE_PASSWORD`, ואת מפתח החתימה המוצפן `signing/release.p12`. את המפתח יוצרים פעם אחת עם ה-workflow "Create signing key", אחרי שמגדירים את הסוד.
 בלי הסוד נבנית גרסת בדיקה בלבד, שמופיעה ב-Artifacts של הריצה.
 
 ## בהמשך

@@ -1,0 +1,42 @@
+name: Create signing key
+
+# Run once by hand (Actions tab, "Run workflow") after adding the KEYSTORE_PASSWORD
+# secret. It makes signing/release.p12, encrypted with that password, and commits it.
+# The password itself never leaves GitHub's secret store.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Create the key
+        env:
+          KP: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KP" ]; then echo "::error::Add the KEYSTORE_PASSWORD secret first"; exit 1; fi
+          if [ ${#KP} -lt 6 ]; then echo "::error::KEYSTORE_PASSWORD must be at least 6 characters"; exit 1; fi
+          if [ -f signing/release.p12 ]; then echo "::error::signing/release.p12 already exists; delete it first to replace the key (phones will then need to reinstall the app)"; exit 1; fi
+          mkdir -p signing
+          keytool -genkeypair -noprompt -storetype PKCS12 -keystore signing/release.p12 \
+            -alias barkannav -keyalg RSA -keysize 3072 -validity 10000 \
+            -dname "CN=Barkan Nav" -storepass:env KP -keypass:env KP
+
+      - name: Commit the key
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git add signing/release.p12
+          git commit -m "Add the encrypted signing key"
+          git push
+          echo "::notice::Key created. Now run the 'Build APK' workflow."

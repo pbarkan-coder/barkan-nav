@@ -11,10 +11,16 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      HAS_KEY: ${{ secrets.KEYSTORE_PASSWORD != '' }}
     steps:
       - uses: actions/checkout@v4
+
+      # A signed build needs both the key file (made once by "Create signing key")
+      # and its password in the KEYSTORE_PASSWORD secret.
+      - name: Check for the signing key
+        env:
+          KP: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KP" ] && [ -f signing/release.p12 ]; then echo "HAS_KEY=true" >> "$GITHUB_ENV"; else echo "HAS_KEY=false" >> "$GITHUB_ENV"; fi
 
       - uses: actions/setup-java@v4
         with:
@@ -25,14 +31,13 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      # signing/release.p12 is an encrypted key file. It is useless without
-      # its password, which lives only in the KEYSTORE_PASSWORD secret.
+      # signing/release.p12 is encrypted; its password lives only in the KEYSTORE_PASSWORD secret.
       - name: Build signed APK
         if: ${{ env.HAS_KEY == 'true' }}
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/signing/release.p12
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: tripapp
+          KEY_ALIAS: barkannav
           KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           set -o pipefail
