@@ -352,7 +352,11 @@ private fun EstimateCard(store: Store) {
                 return@launch
             }
             try {
-                results = Routes.compare(ctx, here.latitude, here.longitude, dest, store.lots.toList())
+                // One lot only: the one chosen, else the nearest. The lots lie in opposite
+                // directions, so comparing them with each other is not useful.
+                val lot = store.selectedLot ?: store.nearest(here.latitude, here.longitude)
+                lot?.let { store.select(it) }
+                results = Routes.compare(ctx, here.latitude, here.longitude, dest, listOfNotNull(lot))
                 forDest = dest
                 store.rememberDestination(dest)
             } catch (e: Exception) {
@@ -376,11 +380,24 @@ private fun EstimateCard(store: Store) {
                 onClick = { if (Loc.hasPermission(ctx)) run() else askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
                 enabled = dest.isNotEmpty() && !busy,
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (busy) "מחשב..." else if (dest.isEmpty()) "קודם ממלאים יעד" else "השווה מסלולים מהמיקום שלי") }
+            ) { Text(if (busy) "מחשב..." else if (dest.isEmpty()) "קודם ממלאים יעד" else "ישירות ברכב או דרך חנה וסע?") }
         }
         if (error.isNotEmpty()) Text(error, color = Color(0xFFC62828))
         if (results.isNotEmpty() && forDest == dest) {
             val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            val via = results.firstOrNull { it.lot != null }
+            val direct = results.firstOrNull { it.lot == null }
+            if (via != null && direct != null) {
+                val diff = direct.totalMinutes - via.totalMinutes
+                Text(
+                    when {
+                        diff > 0 -> "דרך ${via.lot!!.name} חוסך כ-$diff דק'"
+                        diff < 0 -> "נסיעה ישירה ברכב מהירה בכ-${-diff} דק'"
+                        else -> "בערך אותו זמן בשתי הדרכים"
+                    },
+                    fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Green,
+                )
+            }
             results.forEachIndexed { i, o ->
                 val arrive = fmt.format(java.util.Date(System.currentTimeMillis() + o.totalMinutes * 60_000L))
                 val title = (o.lot?.let { "דרך ${it.name}" } ?: "ברכב עד היעד") + ": ${o.totalMinutes} דק'"
@@ -403,7 +420,7 @@ private fun EstimateCard(store: Store) {
                     Text(detail, fontSize = 13.sp, color = Color.Gray)
                 }
             }
-            Text("לחיצה על חניון בוחרת אותו. הזמנים הם הערכה: התנועה משתנה, והאוטובוס לפי לוח הזמנים.", fontSize = 12.sp, color = Color.Gray)
+            Text("החניון: זה שנבחר למטה, ואם לא נבחר, הקרוב אליך. הזמנים הם הערכה: התנועה משתנה, והאוטובוס לפי לוח הזמנים.", fontSize = 12.sp, color = Color.Gray)
         }
     }
 }
