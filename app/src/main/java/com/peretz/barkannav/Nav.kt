@@ -24,11 +24,9 @@ object Nav {
     fun transit(ctx: Context, lot: Lot, destination: String) =
         open(ctx, "https://www.google.com/maps/dir/?api=1&origin=${enc(lot.query)}&destination=${enc(destination)}&travelmode=transit", GMAPS)
 
-    /** Searches Google Maps for park-and-ride lots, near a place or (empty) near the phone. */
-    fun searchLots(ctx: Context, near: String) {
-        val q = if (near.isBlank()) "חנה וסע" else "חנה וסע ליד $near"
-        open(ctx, "https://www.google.com/maps/search/?api=1&query=${enc(q)}", GMAPS)
-    }
+    /** Searches Google Maps for park-and-ride lots around the map's current view. */
+    fun searchLots(ctx: Context) =
+        open(ctx, "https://www.google.com/maps/search/?api=1&query=${enc("חניון חנה וסע")}", GMAPS)
 
     /** Shows a lot on the map. */
     fun showLot(ctx: Context, lot: Lot) {

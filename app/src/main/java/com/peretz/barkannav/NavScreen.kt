@@ -1,5 +1,9 @@
 package com.peretz.barkannav
 
+import android.Manifest
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -41,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 private val Green = Color(0xFF2E7D32)
 
@@ -125,21 +132,42 @@ private fun LotCard(store: Store) {
     val ctx = LocalContext.current
     var adding by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<Lot?>(null) }
-    val dest = store.destination.value.trim()
+    val scope = rememberCoroutineScope()
+    var locating by remember { mutableStateOf(false) }
 
-    Section("2. באיזה חניון חנה וסע?") {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { Nav.searchLots(ctx, dest) }, enabled = dest.isNotEmpty(), modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Search, null); Spacer(Modifier.padding(2.dp)); Text("ליד היעד")
-            }
-            OutlinedButton(onClick = { Nav.searchLots(ctx, "") }, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Default.Search, null); Spacer(Modifier.padding(2.dp)); Text("לידי")
+    fun pickNearest() {
+        locating = true
+        scope.launch {
+            val here = Loc.current(ctx)
+            locating = false
+            val lot = here?.let { store.nearest(it.latitude, it.longitude) }
+            if (lot == null) {
+                Toast.makeText(ctx, "לא הצלחתי לקבל מיקום. בחר חניון מהרשימה.", Toast.LENGTH_LONG).show()
+            } else {
+                store.select(lot)
+                Toast.makeText(ctx, "החניון הקרוב: ${lot.name}", Toast.LENGTH_SHORT).show()
             }
         }
-        Text(
-            "מצאת חניון בגוגל מפות? לוחצים עליו, \"שיתוף\", ובוחרים Barkan Nav. הוא יישמר כאן.",
-            fontSize = 13.sp, color = Color.Gray,
-        )
+    }
+
+    val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) pickNearest()
+        else Toast.makeText(ctx, "בלי מיקום אפשר לבחור חניון מהרשימה.", Toast.LENGTH_SHORT).show()
+    }
+
+    Section("2. באיזה חניון חנה וסע?") {
+        Button(
+            onClick = {
+                if (Loc.hasPermission(ctx)) pickNearest()
+                else askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+            },
+            enabled = !locating,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.LocationOn, null)
+            Spacer(Modifier.padding(4.dp))
+            Text(if (locating) "מאתר מיקום..." else "בחר את החניון הקרוב אליי")
+        }
 
         if (store.lots.isEmpty()) {
             Text("עדיין אין חניונים שמורים.", color = Color.DarkGray)
@@ -160,9 +188,18 @@ private fun LotCard(store: Store) {
                 IconButton(onClick = { removing = lot }) { Icon(Icons.Default.Delete, "מחק", tint = Color.Gray) }
             }
         }
-        TextButton(onClick = { adding = true }) {
-            Icon(Icons.Default.Add, null); Text("הוסף חניון בהקלדה")
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            TextButton(onClick = { adding = true }) {
+                Icon(Icons.Default.Add, null); Text("הוסף חניון")
+            }
+            TextButton(onClick = { Nav.searchLots(ctx) }) {
+                Icon(Icons.Default.Search, null); Text("חפש בגוגל מפות")
+            }
         }
+        Text(
+            "חניון שמצאת בגוגל מפות: לוחצים עליו, \"שיתוף\", ובוחרים Barkan Nav.",
+            fontSize = 12.sp, color = Color.Gray,
+        )
     }
 
     if (adding) AddLotDialog(onDismiss = { adding = false }) { store.addLot(it); adding = false }

@@ -6,14 +6,32 @@ import androidx.compose.runtime.mutableStateOf
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** A park-and-ride lot. [query] is what Waze and Google Maps search for; [link] is an optional Google Maps link. */
-data class Lot(val name: String, val query: String, val link: String = "")
+/**
+ * A park-and-ride lot. [query] is what Waze and Google Maps search for; [link] is an optional
+ * Google Maps link. [lat]/[lng] are a rough position, used only to pick the nearest lot.
+ */
+data class Lot(
+    val name: String,
+    val query: String,
+    val link: String = "",
+    val lat: Double? = null,
+    val lng: Double? = null,
+)
 
 /** Saved lots, recent destinations and the current choice, kept in the app's private preferences. */
 class Store(context: Context) {
     private val prefs = context.getSharedPreferences("barkan_nav", Context.MODE_PRIVATE)
 
     val lots = mutableStateListOf<Lot>().apply { addAll(loadLots()) }
+
+    init {
+        // The built-in lots are added once; after that the user may delete or edit them.
+        if (!prefs.getBoolean("seeded_v1", false)) {
+            BUILT_IN.reversed().forEach { b -> if (lots.none { it.name == b.name }) lots.add(0, b) }
+            saveLots()
+            prefs.edit().putBoolean("seeded_v1", true).apply()
+        }
+    }
     val recents = mutableStateListOf<String>().apply { addAll(loadStrings("recents")) }
     val destination = mutableStateOf(prefs.getString("destination", "") ?: "")
     val selected = mutableStateOf(prefs.getString("selected", "") ?: "")
@@ -63,7 +81,11 @@ class Store(context: Context) {
 
     private fun saveLots() {
         val arr = JSONArray()
-        lots.forEach { arr.put(JSONObject().put("name", it.name).put("query", it.query).put("link", it.link)) }
+        lots.forEach {
+            val o = JSONObject().put("name", it.name).put("query", it.query).put("link", it.link)
+            if (it.lat != null && it.lng != null) o.put("lat", it.lat).put("lng", it.lng)
+            arr.put(o)
+        }
         prefs.edit().putString("lots", arr.toString()).apply()
     }
 
@@ -71,7 +93,11 @@ class Store(context: Context) {
         val arr = JSONArray(prefs.getString("lots", "[]"))
         (0 until arr.length()).map { arr.getJSONObject(it) }.mapNotNull { o ->
             val name = o.optString("name").trim()
-            if (name.isEmpty()) null else Lot(name, o.optString("query").ifBlank { name }, o.optString("link"))
+            if (name.isEmpty()) null else Lot(
+                name, o.optString("query").ifBlank { name }, o.optString("link"),
+                if (o.has("lat")) o.getDouble("lat") else null,
+                if (o.has("lng")) o.getDouble("lng") else null,
+            )
         }
     } catch (e: Exception) {
         emptyList()
@@ -84,7 +110,26 @@ class Store(context: Context) {
         emptyList()
     }
 
+    /** Picks the lot with a known position that is closest to the given point. */
+    fun nearest(lat: Double, lng: Double): Lot? = lots
+        .filter { it.lat != null && it.lng != null }
+        .minByOrNull {
+            val r = FloatArray(1)
+            android.location.Location.distanceBetween(lat, lng, it.lat!!, it.lng!!, r)
+            r[0]
+        }
+
     companion object {
+        /**
+         * The national park-and-ride lots with shuttles into Tel Aviv. Positions are
+         * approximate (town level) and only decide which lot is nearer; navigation
+         * searches by name.
+         */
+        val BUILT_IN = listOf(
+            Lot("חנה וסע שפיים", "חנה וסע שפיים", lat = 32.215, lng = 34.825),
+            Lot("חנה וסע ראשון לציון", "חנה וסע ראשון לציון", lat = 31.97, lng = 34.78),
+        )
+
         private val urlRe = Regex("""https?://\S+""")
 
         /**
