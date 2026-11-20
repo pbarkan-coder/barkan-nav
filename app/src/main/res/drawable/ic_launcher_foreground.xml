@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- A "P" (parking) and an arrow onward -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,30h16c8.3,0 14,5.4 14,13s-5.7,13 -14,13h-8v22h-8zM42,37v12h8c3.9,0 6,-2.4 6,-6s-2.1,-6 -6,-6z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M62,66h10v-7l12,11 -12,11v-7h-10z" />
+</vector>
