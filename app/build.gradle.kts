@@ -4,6 +4,10 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// Google Maps key for travel-time estimates. It is restricted in Google Cloud to this
+// package and signing certificate. Comes from the MAPS_API_KEY secret at build time.
+val mapsKey: String = System.getenv("MAPS_API_KEY")?.trim().orEmpty()
+
 val runNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 val keystorePath: String? = System.getenv("KEYSTORE_PATH")
 
@@ -17,6 +21,7 @@ android {
         targetSdk = 34
         versionCode = runNumber
         versionName = "1.0.$runNumber"
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsKey\"")
     }
 
     signingConfigs {

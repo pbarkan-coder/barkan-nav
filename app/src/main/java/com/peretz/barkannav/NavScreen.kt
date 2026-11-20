@@ -80,6 +80,7 @@ fun NavScreen(store: Store) {
                 Text("נוסעים ברכב לחניון חנה וסע, וממשיכים בתחבורה ציבורית.", color = Color.DarkGray)
                 UpdateBanner()
                 DestinationCard(store)
+                EstimateCard(store)
                 LotCard(store)
                 GoCard(store)
             }
@@ -325,6 +326,84 @@ private fun UpdateBanner() {
                     }
                 },
             ) { Text(if (busy) "מוריד..." else "עדכן") }
+        }
+    }
+}
+
+/** Compares the built-in and saved lots with driving all the way, using live traffic and timetables. */
+@Composable
+private fun EstimateCard(store: Store) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var results by remember { mutableStateOf<List<Routes.Option>>(emptyList()) }
+    var error by remember { mutableStateOf("") }
+    var forDest by remember { mutableStateOf("") }
+    val dest = store.destination.value.trim()
+
+    fun run() {
+        busy = true
+        error = ""
+        scope.launch {
+            val here = Loc.current(ctx)
+            if (here == null) {
+                busy = false
+                error = "לא הצלחתי לקבל מיקום."
+                return@launch
+            }
+            try {
+                results = Routes.compare(ctx, here.latitude, here.longitude, dest, store.lots.toList())
+                forDest = dest
+                store.rememberDestination(dest)
+            } catch (e: Exception) {
+                results = emptyList()
+                error = e.message ?: "החישוב נכשל"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val askLocation = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) run() else error = "צריך מיקום כדי לחשב זמנים."
+    }
+
+    Section("⏱ כמה זמן ייקח?") {
+        if (!Routes.hasKey) {
+            Text("חישוב זמנים עוד לא הופעל בגרסה הזאת (חסר מפתח Google).", color = Color.DarkGray, fontSize = 14.sp)
+        } else {
+            Button(
+                onClick = { if (Loc.hasPermission(ctx)) run() else askLocation.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
+                enabled = dest.isNotEmpty() && !busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (busy) "מחשב..." else if (dest.isEmpty()) "קודם ממלאים יעד" else "השווה מסלולים מהמיקום שלי") }
+        }
+        if (error.isNotEmpty()) Text(error, color = Color(0xFFC62828))
+        if (results.isNotEmpty() && forDest == dest) {
+            val fmt = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+            results.forEachIndexed { i, o ->
+                val arrive = fmt.format(java.util.Date(System.currentTimeMillis() + o.totalMinutes * 60_000L))
+                val title = (o.lot?.let { "דרך ${it.name}" } ?: "ברכב עד היעד") + ": ${o.totalMinutes} דק'"
+                val detail = o.transit?.let { t ->
+                    val line = if (t.lines.isEmpty()) "תחבורה ציבורית" else "קו " + t.lines.joinToString(" ← ")
+                    val dep = if (t.firstDeparture.isNotEmpty()) " (יוצא ${t.firstDeparture})" else ""
+                    "רכב ${o.driveMinutes} · חניה ${Routes.PARK_MINUTES} · $line$dep ${t.minutes} דק'"
+                } ?: "נסיעה ברכב לפי מצב התנועה עכשיו"
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = o.lot != null) { o.lot?.let { store.select(it) } }
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        (if (i == 0) "✅ " else "") + title + " · הגעה ~$arrive",
+                        fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Medium,
+                        color = if (i == 0) Green else Color.Unspecified,
+                    )
+                    Text(detail, fontSize = 13.sp, color = Color.Gray)
+                }
+            }
+            Text("לחיצה על חניון בוחרת אותו. הזמנים הם הערכה: התנועה משתנה, והאוטובוס לפי לוח הזמנים.", fontSize = 12.sp, color = Color.Gray)
         }
     }
 }
